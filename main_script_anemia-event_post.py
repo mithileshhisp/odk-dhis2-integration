@@ -8,8 +8,12 @@ from constants import ODK_AUTH,ODK_API_URL,DHIS2_API_URL,DHIS2_AUTH, LOG_FILE_EV
 from utils import configure_logging, log_info, log_error, get_dhis2_orgunit_uid_by_block_district,data_value_exists_in_dhis2,sendEmail
 
 
-DHIS2_API_POST_URL = "http://172.105.253.84:8665/odk_nipi/api"
-DHIS2_AUTH_POST = ("*****", "*****")
+#DHIS2_API_POST_URL = "http://172.105.253.84:8665/odk_nipi/api"
+#DHIS2_API_POST_URL = "http://49.50.97.167:8665/odk_nipi/api"
+#DHIS2_AUTH_POST = ("******", "*******")
+
+DHIS2_API_POST_URL =  "http://dss.nipi-cure.org:8665/odk_nipi/api"
+DHIS2_AUTH_POST = ("******", "*******")
 
 session_post = requests.Session()
 session_post.auth = DHIS2_AUTH_POST
@@ -24,7 +28,7 @@ def fetch_odk_data():
     try:
         today_date = datetime.now().strftime("%Y-%m-%d")
         updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge {today_date}"
-        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2025-02-28"
+        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2025-11-20"
         print("data fetching for: ",updated_odk_api_url)
         response = requests.get(updated_odk_api_url, auth=ODK_AUTH)
         
@@ -65,7 +69,7 @@ def push_to_dhis2(dhis2_events):
     except Exception as e:
         log_error("An error occurred while pushing data to DHIS2: " + str(e))
 
-def push_event_in_dhis2(session_post, event_payload, event_id, row ):
+def push_event_in_dhis2(session_post, event_payload, event_id, row, execution_date ):
     #
     try:
         event_post_url = f"{DHIS2_API_POST_URL}/events"
@@ -74,8 +78,8 @@ def push_event_in_dhis2(session_post, event_payload, event_id, row ):
        
         imported_event_uid = response.json().get("response", {}).get("importSummaries", [])[0].get("reference")
         event_count = response.json().get("response", {}).get("importSummaries", [])[0].get("importCount",{}).get("imported")
-        print(f"Events created successfully. row : {row} . with uuid : {event_id} . Event count: {event_count}. imported event : {imported_event_uid}")
-        log_info(f"Events created successfully.row : {row}. with uuid : {event_id} .Event count: {event_count}. imported event : {imported_event_uid}")
+        print(f"Events created successfully. row : {row} . with uuid : {event_id} .  Event Date : {execution_date}. Event count: {event_count}. imported event : {imported_event_uid}")
+        log_info(f"Events created successfully.row : {row}. with uuid : {event_id} . Event Date : {execution_date}. Event count: {event_count}. imported event : {imported_event_uid}")
     except requests.RequestException as e:
         resp_msg=response.text
         ind=resp_msg.find('conflict')
@@ -84,8 +88,8 @@ def push_event_in_dhis2(session_post, event_payload, event_id, row ):
             fail_record.write(f'\ncurrent event_id: {event_id}. \n Error Message: {resp_msg[ind-1:]}\n')
             fail_record.write("----------------------------------------------------------------------------------------\n")
 
-        print(f"Failed to create events. . row : {row} .Error: {response.text}")
-        log_error(f"Failed to create events . row : {row}. with uuid : {event_id} Status code: {response.status_code} . error details: {response.json()} .Error: {response.text}")
+        print(f"Failed to create events. . row : {row} . Event Date : {execution_date}. Error: {response.text}")
+        log_error(f"Failed to create events . row : {row}. with uuid : {event_id} . Event Date : {execution_date} .Status code: {response.status_code} . error details: {response.json()} .Error: {response.text}")
 
 
 def main():
@@ -136,7 +140,7 @@ def main():
                         ],
                     }
                         
-                        executor.submit( push_event_in_dhis2, session_post, event_payload, event_id,index+1 )    
+                        executor.submit( push_event_in_dhis2, session_post, event_payload, event_id,index+1, submission["location_camp"]["date_camp"] )    
                     else:
                         print(f"for row { index +1 },Event with uuid: {event_id}, for date {temp_event_date} already exists in DHIS2 with EventId {existing_event[0]['event']}. Skipping.")
                         log_info(f"for row { index +1 }, Event with uuid: {event_id}, for date {temp_event_date} already exists in DHIS2 with EventId {existing_event[0]['event']}. Skipping.")

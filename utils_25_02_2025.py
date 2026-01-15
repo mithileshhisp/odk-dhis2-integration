@@ -123,7 +123,7 @@ def sendEmail():
         s.starttls() 
         
         # Authentication 
-        s.login(fromaddr, "*****") 
+        s.login(fromaddr, "********") 
         
         # Converts the Multipart msg into a string 
         text = msg.as_string() 

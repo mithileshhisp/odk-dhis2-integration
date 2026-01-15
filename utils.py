@@ -123,6 +123,24 @@ def sendEmail():
             msg.attach(part)
         '''   
 
+
+        '''
+        # open the file to be sent  
+
+        LOG_DIR = "logs"
+        PATTERN = "*_dataValueSet_post.log"
+
+        # Find latest matching log file
+        log_files = glob.glob(os.path.join(LOG_DIR, PATTERN))
+        if not log_files:
+            raise FileNotFoundError("No log files found")
+
+        latest_log = max(log_files, key=os.path.getmtime)
+
+        filename = LOG_FILE
+        #attachment = open(filename, "rb") 
+        attachment = open(latest_log, "rb") 
+        '''
         
         filename_log = LOG_FILE
         attachment = open(filename_log, "rb") 
@@ -142,19 +160,34 @@ def sendEmail():
         msg.attach(p) 
         
         # creates SMTP session 
-        s = smtplib.SMTP('smtp.gmail.com', 587) 
+
+        #smtpserver = smtplib.SMTP("smtp.gmail.com", 587)
         
-        # start TLS for security 
-        s.starttls() 
-        
-        # Authentication , email-password
-        s.login(fromaddr, "*****") 
-        
-        # Converts the Multipart msg into a string 
-        text = msg.as_string() 
-        
-        # sending the mail 
-        s.sendmail(fromaddr, toaddr, text) 
-        print(f"mail send to: {toaddr}")
-        # terminating the session 
-        s.quit() 
+        try:
+            smtpserver = smtplib.SMTP('smtp.gmail.com', 587) 
+            smtpserver.ehlo()
+            # start TLS for security 
+            smtpserver.starttls()
+            smtpserver.ehlo()
+
+            # Authentication 
+            
+            smtpserver.login(fromaddr, "********")
+            #smtpserver.login(fromaddr, "********")
+            # start TLS for security 
+            #s.starttls() 
+            
+            # Authentication 
+            #s.login(fromaddr, "*********") 
+            
+            # Converts the Multipart msg into a string 
+            text = msg.as_string() 
+            
+            # sending the mail 
+            smtpserver.sendmail(fromaddr, toaddr, text) 
+            print(f"mail send to: {toaddr}")
+            log_info(f"mail send to: {toaddr}")
+            # terminating the session 
+            smtpserver.quit()
+        except Exception as exception:
+            print("Error: %s!\n\n" % exception)
