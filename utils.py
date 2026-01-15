@@ -276,8 +276,8 @@ def sendEmail():
             s.starttls() 
             
             # Authentication 
-            #s.login(fromaddr, "NIPIODKHispIndia@123")
-            s.login(fromaddr, "hvaoefwbpdvnsqts")
+            #s.login(fromaddr, "*********")
+            s.login(fromaddr, "********")
             
             # Converts the Multipart msg into a string 
             text = msg.as_string() 
