@@ -13,11 +13,8 @@ from utils import (
     data_value_exists_in_dhis2, sendEmail, get_orgUnit_code_uid_dict
 )
 
-#DHIS2_API_POST_URL = "http://49.50.97.167:8665/odk_nipi/api"
-#DHIS2_AUTH_POST = ("******", "*******")
-
-DHIS2_API_POST_URL =  "http://dss.nipi-cure.org:8665/odk_nipi/api"
-DHIS2_AUTH_POST = ("******", "********")
+DHIS2_API_POST_URL = "http://49.50.97.167:8665/odk_nipi/api"
+DHIS2_AUTH_POST = ("*****", "******")
 
 session_post = requests.Session()
 session_post.auth = DHIS2_AUTH_POST
@@ -25,9 +22,8 @@ session_post.auth = DHIS2_AUTH_POST
 def fetch_odk_data():
     try:
         today_date = datetime.now().strftime("%Y-%m-%d")
-        #https://odk.nipi-cure.org/v1/projects/9/forms/dss_child_health_mp.svc/Submissions?$filter=__system/submissionDate ge 2025-09-15
-        updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge {today_date}"
-        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2025-11-25"
+        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge {today_date}"
+        updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2025-11-01"
         #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2025-04-26"
         #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2025-07-26"
         #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2025-01-01"
@@ -70,24 +66,6 @@ def assign_value_if_not_null(value):
         return None
 
 
-#dt_str = "2026-01-14T00:00:00.000+05:30"
-#dt = datetime.fromisoformat(dt_str)
-#date_str = dt.strftime("%Y-%m-%d")
-#print(date_str)
-
-
-def format_date_event_enrollment(date_str):
-    try:
-        #date_str = "14-01-26"
-        #dt = datetime.strptime(date_str, "%d-%m-%y")
-        #iso_date = dt.strftime("%Y-%m-%d")
-        
-        date_obj = datetime.fromisoformat(date_str)
-        formatted_date = date_obj.strftime("%Y-%m-%d")
-        return formatted_date
-    except ValueError:
-        return None
-
 def format_date(date_str):
     try:
         date_obj = datetime.strptime(date_str, "%y-%m-%d")
@@ -96,17 +74,6 @@ def format_date(date_str):
     except ValueError:
         return None
 
-def format_date_yyyy_mm_dd(date_str):
-    try:
-        #date_str = "14-01-26"
-        #dt = datetime.strptime(date_str, "%d-%m-%y")
-        #iso_date = dt.strftime("%Y-%m-%d")
-        
-        date_obj = datetime.strptime(date_str, "%d-%m-%y")
-        formatted_date = date_obj.strftime("%Y-%m-%d")
-        return formatted_date
-    except ValueError:
-        return None
 
 def convert_to_boolean(value):
     if value == "1":
@@ -206,11 +173,6 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
         print(f"ODK data Sl.No. {index+1}. patient_id {temp_patient_id}")
         log_info(f"ODK data Sl.No. {index+1}. patient_id {temp_patient_id}")
 
-        #odk_cdate = format_date_event_enrollment(submission["g_info"]["cdate"])
-        #odk_f_cdate = format_date_yyyy_mm_dd(submission["f_cdate"])
-        #print(f"ODK cdate {index+1}. cdate {odk_cdate}, ODK f_cdate . {odk_f_cdate}")
-        
-
         #orgunit_uid = get_dhis2_orgunit_uid_by_nin(session_post,DHIS2_API_POST_URL,facility_nin)
 
         orgunit_uid = orgUnit_code_uid_dict[facility_nin]
@@ -240,9 +202,9 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                 log_info(f"Event with ID 1 {event_id} not exists in DHIS2. Adding.")
                 #print("---nexist orgunit--",
                       #assign_value_if_not_null(submission["login_check1"]["y_mobile"]))
-                #print("---nexist orgunit facility_nin --", facility_nin , " -- orgunit_uid " , orgunit_uid)
+                print("---nexist orgunit facility_nin --", facility_nin , " -- orgunit_uid " , orgunit_uid)
                 tracker_payloads = []
-                #print(" gender --- ", submission["g_info"]["gender"])
+                print(" gender --- ", submission["g_info"]["gender"])
                 tracker = {
                     "trackedEntityType": "oATSCRUUP2e",
                     "orgUnit": orgunit_uid,
@@ -271,14 +233,14 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                         {
                             "orgUnit": orgunit_uid,
                             "program": "Tt9ILP7v4Fd",
-                            "enrollmentDate": format_date_event_enrollment(submission["g_info"]["cdate"]),
-                            "incidentDate": format_date_event_enrollment(submission["g_info"]["cdate"]),
-                            "dueDate": format_date_event_enrollment(submission["g_info"]["cdate"]),
+                            "enrollmentDate": submission["g_info"]["cdate"],
+                            "incidentDate": submission["g_info"]["cdate"],
+                            "dueDate": submission["g_info"]["cdate"],
                             "events": [
                                 {
                                     "program": "Tt9ILP7v4Fd",
                                     "orgUnit": orgunit_uid,
-                                    "eventDate": format_date_event_enrollment(submission["g_info"]["cdate"]),
+                                    "eventDate": submission["g_info"]["cdate"],
                                     "status": "COMPLETED",
                                     "storedBy": "admin",
                                     "programStage": "rLqP0fc0ezB",
@@ -304,12 +266,9 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                                         {"dataElement": "VTmoPxkBo6E", "value": assign_value_if_not_null(
                                             submission["g_assessment"]["ctof"])},
                                         #   {"dataElement": "UpVOPm0GEGs", "value": assign_value_if_not_null(submission["g_assessment"]["tstatus"])},
-                                        
-                                        ### changed in new API again changed as on 02/12/2025
-                                        {"dataElement": "O5AhfFlx7mo", "value": assign_value_if_not_null(submission["g_assessment"]["Respiratory_Rate"])},
-                                        
-                                        #{"dataElement": "O5AhfFlx7mo", "value": assign_value_if_not_null(submission["g_symptom2"]["Respiratory_Rate"])},
-                                        
+                                        {"dataElement": "O5AhfFlx7mo", "value": assign_value_if_not_null(
+                                            submission["g_assessment"]["Respiratory_Rate"])},
+
                                         #   {"dataElement": "TsgCP7DmoOk", "value": assign_value_if_not_null(submission["g_assessment"]["fbreath"])},
                                         #   {"dataElement": "JspJkmCqjVi", "value": assign_value_if_not_null(submission["g_assessment"]["rstatus"])},
                                         {"dataElement": "FIbRtWyuYTV", "value": assign_value_if_not_null(
@@ -336,12 +295,10 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                                             submission["g_symptom4"]["RDT_Result"])},
                                         {"dataElement": "GFuAmDGOwU3", "value": convert_to_boolean(
                                             submission["g_symptom2"]["sym_cou"])},
-                                        
-                                        #{"dataElement": "us1ejneunla", "value": convert_to_boolean(submission["g_symptom2"]["chest_indrawing"])},
-                                        ### changed in new API again changed as on 02/12/2025
-                                        {"dataElement": "us1ejneunla", "value": convert_to_boolean(submission["g_assessment"]["chest_indrawing"])},   
-                                        
-                                        {"dataElement": "zSMO6Z9ZYuW", "value": assign_value_if_not_null(submission["g_symptom2"]["cough_days"])},
+                                        {"dataElement": "zSMO6Z9ZYuW", "value": assign_value_if_not_null(
+                                            submission["g_symptom2"]["cough_days"])},
+                                        {"dataElement": "us1ejneunla", "value": convert_to_boolean(
+                                            submission["g_symptom2"]["chest_indrawing"])},
                                         {"dataElement": "bh29EbIXtoW", "value": convert_to_boolean(
                                             submission["g_symptom3"]["sym_dia"])},
                                         {"dataElement": "ZYBgaRdy2P2", "value": convert_to_boolean(
@@ -404,10 +361,8 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                                             submission["class_nutri_L2M"])},
                                         {"dataElement": "ZJS5H5EolmS", "value": assign_value_if_not_null(
                                             submission["class_nutri_M2M"])},
-                                        
-                                         #### changed  in new API
-                                        # {"dataElement": "DZoPvl0fICU", "value": assign_value_if_not_null(submission["g_symptom5"]["class_anemia"])}, 
-                                        {"dataElement": "DZoPvl0fICU", "value": assign_value_if_not_null(submission["class_anemia"])},    
+                                        {"dataElement": "DZoPvl0fICU", "value": assign_value_if_not_null(
+                                            submission["g_symptom5"]["class_anemia"])},
 
                                         # {"dataElement": "CU97c3f2hq5", "value": assign_value_if_not_null(submission["dose_calculation"]["Amoxi"])},
 
@@ -432,7 +387,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                                         #  {"dataElement": "aQ9xskOsjhD", "value": assign_value_if_not_null(submission["mal5to60"])},
                                         #  {"dataElement": "UG1Iroe8LPQ", "value": assign_value_if_not_null(submission["mal12to60"])},
 
-                                        {"dataElement": "xPM9IdEvtuI", "value": format_date_yyyy_mm_dd(
+                                        {"dataElement": "xPM9IdEvtuI", "value": format_date(
                                             submission["f_cdate"])},
                                         {"dataElement": "uHT7yTuxaVh", "value": assign_value_if_not_null(
                                             submission["action"]["action_taken"])},
@@ -448,7 +403,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
 
 
                 }
-                #print(" tracker --- ",tracker)
+                print(" tracker --- ",tracker)
                 # boolean type de's
                 {"dataElement": "aIHwYTVZ8xa", "value": convert_to_boolean(
                     submission["g_symptom4"]["stiff_neck"])},
@@ -560,7 +515,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                 # dg_sign_values = submission.get("group_dgsign", {}).get("dg_sign", "").split()
                 # feeding_values = submission.get("g_feeding", {}).get("Fassessment", "").split()
 
-                #print(" tracker 2 ----------- 2 ",tracker)
+                print(" tracker 2 ----------- 2 ",tracker)
                 tracker_payloads.append(tracker)
                 
                 dg_sign_values = submission.get("group_dgsign", {}).get("dg_sign")
@@ -582,6 +537,8 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                     ecd_warning_values = []
                 else:
                     ecd_warning_values = ecd_warning_values.split()
+
+
 
                # Loop through each value in dg_sign_values
                 for dg_sign_value in dg_sign_values:
@@ -657,11 +614,11 @@ def push_to_dhis2(dhis2_post_url,session_post,dhis2_events,row,patient_id,event_
         postBulkTEIEnrollEvent = {
             "trackedEntityInstances" :  dhis2_events
         }
-        #print(f"dhis2_events size {len(dhis2_events)}")
+        print(f"dhis2_events size {len(dhis2_events)}")
         #print(f"postBulkTEIEnrollEvent {postBulkTEIEnrollEvent}")
 
         response = session_post.post(f"{dhis2_post_url}/trackedEntityInstances", data=json.dumps(postBulkTEIEnrollEvent), headers={"Content-Type": "application/json"})
-        #print(f"response  {response.text}")
+        print(f"response  {response.text}")
         if response.status_code != 200:
             # Log detailed error information
             log_error(
