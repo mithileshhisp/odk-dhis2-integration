@@ -23,7 +23,7 @@ ODK_API_URL = "https://odk.nipi-cure.org/v1/projects/9/forms/dss_child_health_mp
 #DHIS2_API_URL =  "http://49.50.97.167:8665/odk_nipi/api"
 DHIS2_API_URL =  "http://dss.nipi-cure.org:8665/odk_nipi/api"
 
-#ODK_AUTH = ("sourabh.bhardwaj@hispindia.org", "h!spD@v123")
+
 ODK_AUTH = ("dss.nipi@hispindia.org", "********")
 DHIS2_AUTH = ("*******", "******")
 #DHIS2_AUTH = ("*****", "******")
