@@ -40,14 +40,13 @@ def fetch_odk_data():
 
         #https://odk.nipi-cure.org/v1/projects/9/forms/dss_child_health_mp.svc/Submissions?$filter=__system/submissionDate ge 2025-09-15
         #https://odk.nipi-cure.org/v1/projects/9/forms/dss_child_health_mp.svc/Submissions?$filter=__system/submissionDate ge 2026-05-01
-        updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge {previous_date}"
-        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge {today_date}"
-        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2026-09-02"
+        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge {previous_date}"
+        updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge {today_date}"
+        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2026-02-01"
         #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2025-04-26"
         #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2025-07-01"
         #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate le 2025-09-01"
-        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2026-07-31 and __system/submissionDate lt 2026-08-06"
-        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2026-07-14"
+        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2026-07-10"
         #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge 2024-01-01"
 
         log_info(f"Data fetched from odk for date ge {today_date}, with url {updated_odk_api_url}")
@@ -653,6 +652,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
             else:
                 global  total_skip_count 
                 total_skip_count = total_skip_count + 1
+                
                 print("Event with uuid:", event_id, " and Event date: ", execution_date, "already exists in DHIS2. Skipping.")
                 log_info( f"Event with ID {event_id} and Event date {execution_date} already exists in DHIS2. Skipping.")
         else:
@@ -762,4 +762,5 @@ if __name__ == "__main__":
 
     print(f"total_patient_count. {total_patient_count}, null_patient_id_count. {null_patient_id_count}, event_push_count {event_push_count}, total_skip_count {total_skip_count}")
     log_info(f"total_patient_count. {total_patient_count}, null_patient_id_count. {null_patient_id_count}, event_push_count {event_push_count}, total_skip_count {total_skip_count}")
+
     sendEmail()
