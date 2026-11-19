@@ -10,12 +10,18 @@ from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime
 
+#from constants import DHIS2_API_URL, DHIS2_AUTH,  ODK_API_URL, LOG_FILE
 from constants import DHIS2_API_URL, DHIS2_AUTH,  ODK_API_URL, LOG_FILE
 from dotenv import load_dotenv
 import os
 import glob
 load_dotenv()
 
+FROM_EMAIL_ADDR = os.getenv("FROM_EMAIL_ADDR")
+FROM_EMAIL_PASSWORD = os.getenv("FROM_EMAIL_PASSWORD")
+
+ODK_API_URL_ODISHA = os.getenv("ODK_API_URL_ODISHA")
+updated_odk_ssbsk_odisha_api_url = f"{ODK_API_URL_ODISHA}?$filter=__system/submissionDate"
 
 def configure_logging( log_file_name ):
 
@@ -255,7 +261,7 @@ def data_value_exists_in_dhis2(session_post,DHIS2_API_URL,event_id,orgunit_uid):
         return False
     
 
-def sendEmail():
+def sendEmail_old( log_file_name ):
     # creates SMTP session
     #s = smtplib.SMTP('smtp.gmail.com', 587)
     # start TLS for security
@@ -273,9 +279,7 @@ def sendEmail():
     # terminating the session
     #s.quit()
     
-
-
-    fromaddr = "dss.nipi@hispindia.org"
+    fromaddr = FROM_EMAIL_ADDR
 
     # list of email_id to send the mail
     #li = ["mithilesh.thakur@hispindia.org", "saurabh.leekha@hispindia.org","dpatankar@nipi-cure.org","mohinder.singh@hispindia.org"]
@@ -300,17 +304,31 @@ def sendEmail():
         # string to store the body of the mail 
         #body = "Python Script test of the Mail"
 
-        today_date = datetime.now().strftime("%Y-%m-%d")
-        updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge {today_date}"
-        body = f"ODK To DHIS2 DSS Child Health Program data import log file for the url { updated_odk_api_url }"
+        #today_date = datetime.now().strftime("%Y-%m-%d")
+        #updated_odk_api_url = f"{ODK_API_URL}?$filter=__system/submissionDate ge {today_date}"
+        body = f"ODK To DHIS2 DSS Child Health Program data import log file for the url { updated_odk_ssbsk_odisha_api_url }"
         
         # attach the body with the msg instance 
         msg.attach(MIMEText(body, 'plain')) 
         
+
+        # open the file to be sent  
+
+        LOG_DIR = "logs"
+        filename = log_file_name
+        # Find latest matching log file
+        log_files = glob.glob(os.path.join(LOG_DIR, filename))
+        if not log_files:
+            raise FileNotFoundError("No log files found")
+
+        latest_log = max(log_files, key=os.path.getmtime)
+
+        #attachment = open(filename, "rb") 
+        attachment = open(latest_log, "rb") 
         
         # open the file to be sent  
-        filename = LOG_FILE
-        attachment = open(filename, "rb") 
+        
+        #attachment = open(filename, "rb") 
         
         # instance of MIMEBase and named as p 
         p = MIMEBase('application', 'octet-stream') 
@@ -333,8 +351,7 @@ def sendEmail():
             s.starttls() 
             
             # Authentication 
-            #s.login(fromaddr, "NIPIODKHispIndia@123")
-            s.login(fromaddr, "tehiskuwolwjreye")
+            s.login(fromaddr, FROM_EMAIL_PASSWORD)
             
             # Converts the Multipart msg into a string 
             text = msg.as_string() 
@@ -347,3 +364,90 @@ def sendEmail():
             s.quit()
         except Exception as exception:
             print("Error: %s!\n\n" % exception)
+
+
+
+def sendEmail(log_file_name):
+
+    fromaddr = FROM_EMAIL_ADDR
+    li = ["mithilesh.thakur@hispindia.org"]
+
+    LOG_DIR = "logs"
+    ERROR_CSV_FILE = "DHIS2_Push_Errors.csv"
+
+    # Find latest matching log file
+    log_files = glob.glob(os.path.join(LOG_DIR, log_file_name))
+
+    if not log_files:
+        raise FileNotFoundError(
+            f"No log files found for: {log_file_name}"
+        )
+
+    latest_log = max(log_files, key=os.path.getmtime)
+
+    # Prepare attachments
+    attachments = [latest_log]
+
+    # Attach error CSV only if it exists and contains data
+    if (
+        os.path.isfile(ERROR_CSV_FILE)
+        and os.path.getsize(ERROR_CSV_FILE) > 0
+    ):
+        attachments.append(ERROR_CSV_FILE)
+    else:
+        log_info("DHIS2 error CSV not found or empty. Skipping attachment.")
+
+    for toaddr in li:
+
+        msg = MIMEMultipart()
+
+        msg['From'] = fromaddr
+        msg['To'] = toaddr
+        msg['Subject'] = "ODK To DHIS2 data import log and error report"
+
+        body = (
+            f"ODK To DHIS2 DSS Child Health Program data import report "
+            f"for the URL: {updated_odk_ssbsk_odisha_api_url}\n\n"
+            f"Please find the attached log file and DHIS2 error CSV "
+            f"(if generated)."
+        )
+
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Attach log file and error CSV
+        for file_path in attachments:
+
+            with open(file_path, "rb") as attachment:
+
+                p = MIMEBase('application', 'octet-stream')
+                p.set_payload(attachment.read())
+
+                encoders.encode_base64(p)
+
+                p.add_header(
+                    'Content-Disposition',
+                    'attachment',
+                    filename=os.path.basename(file_path)
+                )
+
+                msg.attach(p)
+
+        try:
+            s = smtplib.SMTP('smtp.gmail.com', 587)
+            s.starttls()
+            s.login(fromaddr, FROM_EMAIL_PASSWORD)
+
+            s.sendmail(
+                fromaddr,
+                toaddr,
+                msg.as_string()
+            )
+
+            print(f"Mail sent to: {toaddr}")
+            log_info(f"Mail sent to: {toaddr}")
+
+            s.quit()
+
+        except Exception as exception:
+            print(f"Email error: {exception}")
+            log_error(f"Email error: {exception}")

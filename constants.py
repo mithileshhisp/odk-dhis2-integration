@@ -23,12 +23,12 @@ ODK_API_URL = "https://odk.nipi-cure.org/v1/projects/9/forms/dss_child_health_mp
 #DHIS2_API_URL =  "http://49.50.97.167:8665/odk_nipi/api"
 DHIS2_API_URL =  "http://dss.nipi-cure.org:8665/odk_nipi/api"
 
+#ODK_AUTH = ("********", "********")
+ODK_AUTH = ("******", "*********")
+DHIS2_AUTH = ("******", "********")
+#DHIS2_AUTH = ("*******", "*******")
 
-ODK_AUTH = ("dss.nipi@hispindia.org", "********")
-DHIS2_AUTH = ("*******", "******")
-#DHIS2_AUTH = ("*****", "******")
-
-#LOG_FILE = datetime.now().strftime("%Y-%m-%d") + "_dss_child_health_integration_missing_patient.log"
+LOG_FILE = datetime.now().strftime("%Y-%m-%d") + "_dss_child_health_integration_missing_patient.log"
 LOG_FILE_RAJASTHAN = datetime.now().strftime("%Y-%m-%d") + "_nipi_odk_dhis2_ssbsk_integration_rajasthan.log"
 LOG_FILE_ODISHA = datetime.now().strftime("%Y-%m-%d") + "_nipi_odk_dhis2_ssbsk_integration_odisha.log"
 

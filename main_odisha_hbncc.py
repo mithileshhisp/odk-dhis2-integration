@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 import json
 from datetime import datetime ,timedelta
+import csv
 from dotenv import load_dotenv
 import os
 #import certifi  ## for post data in hmis production certificate issue
@@ -28,14 +29,14 @@ ODK_FILTER_DATE = os.getenv("ODK_FILTER_DATE")
 
 DHIS2_API_URL = os.getenv("DHIS2_API_URL")
 DHIS2_USER = os.getenv("DHIS2_USER")
-DHIS2_POST_PASSWORD = os.getenv("DHIS2_PASSWORD")
+DHIS2_PASSWORD = os.getenv("DHIS2_PASSWORD")
 
 META_ATTRIBUTE_SSBSK_ORG_UNIT_CODE = os.getenv("META_ATTRIBUTE_SSBSK_ORG_UNIT_CODE")
 
 org_unit_api_url = f"{DHIS2_API_URL}/organisationUnits"
 
 session_dhis2 = requests.Session()
-session_dhis2.auth = (DHIS2_USER, DHIS2_POST_PASSWORD)
+session_dhis2.auth = (DHIS2_USER, DHIS2_PASSWORD)
 
 session_odk = requests.Session()
 #session_get.auth = (user, pwd)
@@ -58,14 +59,20 @@ def fetch_odk_data():
         print(f"today_date:", today_date)
         print(f"previous_date:", previous_date)
 
-        updated_odk_ssbsk_api_url = f"{ODK_API_URL_ODISHA}?$filter=__system/submissionDate ge {ODK_FILTER_DATE}"
-       
+        #updated_odk_ssbsk_api_url = f"{ODK_API_URL_ODISHA}?$filter=__system/submissionDate ge {ODK_FILTER_DATE}"
 
-        log_info(f"Data fetched from odk for date ge {today_date}, with url {updated_odk_ssbsk_api_url}")
+        #updated_odk_ssbsk_api_url = "https://odk.nipi-cure.org/v1/projects/15/forms/hbnc_hbyc_visit.svc/Submissions?$filter=__system/submissionDate ge '2026-10-01T01:00:00Z' and __system/submissionDate lt '2026-10-04T00:00:00Z'"
+        
+        #updated_odk_ssbsk_odisha_api_url = "https://odk.nipi-cure.org/v1/projects/15/forms/hbnc_hbyc_visit.svc/Submissions"
+        
+        updated_odk_ssbsk_odisha_api_url =  "https://odk.nipi-cure.org/v1/projects/15/forms/hbnc_hbyc_visit.svc/Submissions?$filter=__system/submissionDate ge 2026-10-05T01:00:00Z and __system/submissionDate lt 2026-10-06T00:00:00Z"
+        
+        log_info(f"Data fetched from odk for date ge {today_date}, with url {updated_odk_ssbsk_odisha_api_url}")
 
-        print(f"Data fetched for:", updated_odk_ssbsk_api_url)
+        print(f"Data fetched for:", updated_odk_ssbsk_odisha_api_url)
 
-        response = requests.get(updated_odk_ssbsk_api_url, auth=session_odk.auth)
+        response = requests.get(updated_odk_ssbsk_odisha_api_url, auth=session_odk.auth)
+
         response.raise_for_status()
         if response.status_code == 200:
             if response.json() and "value" in response.json():
@@ -133,6 +140,60 @@ def convert_date(value):
     )
 
 
+#from datetime import datetime
+## 
+# ============================================================
+# DATE convert this date 17-Aug-2026 to YYYY-MM-DD also assessment_date: 21-ଅକ୍ଟୋବର-2026
+# ============================================================
+#formatted_date = datetime.strptime(date_str, "%d-%b-%Y").strftime("%Y-%m-%d")
+from datetime import datetime
+
+def convert_odk_date(date_value):
+
+    if not date_value:
+        return None
+
+    odia_month_mapping = {
+        "ଜାନୁଆରୀ": "Jan",
+        "ଫେବୃଆରୀ": "Feb",
+        "ମାର୍ଚ୍ଚ": "Mar",
+        "ଏପ୍ରିଲ": "Apr",
+        "ମେ": "May",
+        "ଜୁନ": "Jun",
+        "ଜୁଲାଇ": "Jul",
+        "ଅଗଷ୍ଟ": "Aug",
+        "ସେପ୍ଟେମ୍ବର": "Sep",
+        "ଅକ୍ଟୋବର": "Oct",
+        "ନଭେମ୍ବର": "Nov",
+        "ଡିସେମ୍ବର": "Dec"
+    }
+
+    date_value = str(date_value).strip()
+
+    # Convert Odia month names into English
+    for odia_month, english_month in odia_month_mapping.items():
+        date_value = date_value.replace(
+            odia_month,
+            english_month
+        )
+
+    # Normalize abbreviated month with dot (Oct. -> Oct)
+    date_value = date_value.replace(".-", "-")
+
+    # Parse date and return ISO format
+    for date_format in ("%d-%b-%Y", "%d-%B-%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(
+                date_value,
+                date_format
+            ).strftime("%Y-%m-%d")
+
+        except ValueError:
+            continue
+
+    print(f"WARNING: Unable to parse assessment date: {date_value}")
+    return None
+
 #dt_str = "2026-01-14T00:00:00.000+05:30"
 #dt = datetime.fromisoformat(dt_str)
 #date_str = dt.strftime("%Y-%m-%d")
@@ -179,9 +240,6 @@ def convert_to_boolean(value):
     else:
         return None
 
-
-
-
 def get_existing_child_tei(session_dhis2, dhis2_api_url, child_unique_id, orgunit_uid, program_uid="pUOYd7YC9GN"):
     """
     Find an existing DHIS2 Tracker TEI using the class_child_uid attribute.
@@ -202,6 +260,9 @@ def get_existing_child_tei(session_dhis2, dhis2_api_url, child_unique_id, orguni
     if child_unique_id == "" or child_unique_id.lower() in ("none", "null"):
         return None
     #https://stage.hispindia.org/ssbsk/api/tracker/trackedEntities?fields=trackedEntity,trackedEntityType,orgUnit,enrollments[enrollment,program,orgUnit,enrolledAt,occurredAt]&ou=m71LCnDCvyT&ouMode=SELECTED&program=pUOYd7YC9GN&filter=aAMjO9TQK0I:EQ:65c07e1f-40a4-441c-899d-076708c57057&paging=false
+    
+    ## final url with TEI and event-check
+    #https://stage.hispindia.org/ssbsk_replica/api/tracker/trackedEntities?fields=trackedEntity,attributes,trackedEntityType,orgUnit,enrollments[enrollment,program,orgUnit,enrolledAt,occurredAt,dueDate,events[event,programStage,occurredAt,dataValues[dataElement,value]]]&ou=m71LCnDCvyT&ouMode=SELECTED&program=pUOYd7YC9GN&filter=aAMjO9TQK0I:EQ:76307bd4-cdbd-45d4-a39a-cf7f5ae38d35&paging=false
     #url = f"{dhis2_api_url}/tracker/trackedEntities"
     url = f"{dhis2_api_url}/tracker/trackedEntities?ou={orgunit_uid}&ouMode=SELECTED&program=pUOYd7YC9GN"
     params = {
@@ -210,6 +271,18 @@ def get_existing_child_tei(session_dhis2, dhis2_api_url, child_unique_id, orguni
         "paging": "false",
     }
 
+    '''
+    params = {
+        "program": program_uid,
+        "filter": f"aAMjO9TQK0I:eq:{child_unique_id}",
+        "fields": (
+            "trackedEntity,attributes,trackedEntityType,orgUnit,"
+            "enrollments[enrollment,program,orgUnit,enrolledAt,occurredAt,dueDate,"
+            "events[event,programStage,occurredAt,dataValues[dataElement,value]]]"
+        ),
+        "paging": "false",
+    }
+    '''
     try:
         response = session_dhis2.get(url, params=params, timeout=60)
         response.raise_for_status()
@@ -311,6 +384,79 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
         "V99": "XyqsNvFFLOZ"
     }
 
+
+    ecd_warning_mapping = {
+        "E01": "B12TfHb3o6A",
+        "E02": "QO3DFtFSilI",
+        "E03": "nGsb4JuyCZR",
+        "E04": "cRhkUikMeDc",
+        "E05": "JMgCO7GiGUh",
+        "E06": "xt2v93ea67v",
+        "E07": "Uzv6SIhd5hO",
+        "E08": "iIMwecQDmrm",
+        "E09": "InsgdsFlf3T",
+        "E10": "gpMGXc4evf7",
+        "E11": "fgGPQfnjGwE",
+        "E12": "jazrY7slXyV",
+        "E13": "f7ijLXSnwb5",
+        "E14": "mjXnYQSqfeh",
+        "E15": "Rcd1ZSW3Mip",
+        "E16": "y2krxaNL0tb",
+        "E17": "ZsCoTxs7KQm",
+        "E18": "OOlsB477M49",
+        "E19": "c4QmJqI9kni",
+        "E20": "LoiPZR4JAOX",
+        "E21": "j4PIFPAPgy3",
+        "E22": "VICQV57Awkz",
+        "E23": "n9HSDD8QKSF",
+        "E24": "ru3VRpFd4vr",
+        "E25": "ebL6BqTYfnw",
+        "E26": "dZcnu5yep4T",
+        "E27": "PT6gS4rTzRC",
+        "E28": "s1mCkO5kJPX",
+        "E29": "EQ3htfGppMQ",
+        "E30": "LLh5Jpn0Orp",
+        "E31": "sPIiST3oqIf",
+        "E32": "Fw5JN4RwpBQ",
+        "E33": "vRTyG0WPjdE",
+        "E34": "oVGReM75DL2",
+        "E35": "lep2iMZZyKo",
+        "E36": "oU7TSn6k1Yx",
+        "E37": "rLDVtOP3IyW",
+        "E38": "MnyRyDwvF9X",
+        "E39": "PvVsS09x5lN",
+        "E40": "JyZOoBBK0qe",
+        "E99": "mXvvWjvKwgO",
+    }
+
+
+    danger_sign_mother_mapping = {
+        "M01": "xEArRS2vCMn",
+        "M02": "d9yEJBLE036",
+        "M03": "L0Gd5fLU2aJ",
+        "M04": "kxGHehg60LQ",
+        "M05": "wA16O1GUqFU",
+        "M06": "JgNhtIE4cnr",
+        "M07": "FwK1cWytWSN",
+        "M08": "tndzGkBc9yf",
+        "M09": "KPvCib8H9tK",
+        "M10": "N1BhbiB2YRI",
+        "M99": "j3VotwVz0Qb",
+    }
+
+    danger_sign_child_mapping = {
+        "D1": "Om5ACKTqLST",
+        "D2": "PKhln5ZY66g",
+        "D3": "KBdPqAlF0XD",
+        "D4": "xNcdu5TrcV8",
+        "D5": "edOrG2zCtEe",
+        "D6": "AMcj6YQ2ubU",
+        "D7": "nN9QYgr8NCY",
+        "D8": "wnPWjElvNa5",
+        "D9": "tkrTMQkpgeo",
+        "D10": "tuNEZ4nBGLy",
+    }
+
     tracker_payloads = []
 
     for index, submission in enumerate(odk_data):
@@ -327,7 +473,19 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
         global total_child_count
         total_child_count =  index + 1
         #execution_date = submission["assessment_date"] ## 17-Aug-2026
-        execution_date = datetime.strptime(submission["assessment_date"], "%d-%b-%Y").strftime("%Y-%m-%d")
+
+        #assessment_date = submission["assessment_date"]
+
+        #print(f"assessment_date: {assessment_date}")
+        #log_info(f"assessment_date: {assessment_date}")
+
+        assessment_date_with_function = convert_odk_date(submission["assessment_date"])
+
+        print(f"assessment_date_with_function: {assessment_date_with_function}")
+        log_info(f"assessment_date_with_function: {assessment_date_with_function}")
+                                           
+        #execution_date = datetime.strptime(submission["assessment_date"], "%d-%b-%Y").strftime("%Y-%m-%d")
+        execution_date = convert_odk_date(submission["assessment_date"])
 
         block_code = submission["grp_provider"]["block_code"]
         district_code  = submission["grp_provider"]["district_code"]
@@ -411,8 +569,22 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                         f"(TEI: {existing_child.get('trackedEntity')}). Adding new event only."
                     )
                 else:
+                    global total_tei_registration_count
+
+                    total_tei_registration_count += 1
+
                     print(f"Child with ID {child_unique_id} does not exist in DHIS2. Adding TEI, enrollment and event.")
                     log_info(f"Child with ID {child_unique_id} does not exist in DHIS2. Adding TEI, enrollment and event.")
+
+                    print(
+                        f"New TEI registration: class_child_uid={child_unique_id}, "
+                        f"TEI registration count={total_tei_registration_count}"
+                    )
+
+                    log_info(
+                        f"New TEI registration: class_child_uid={child_unique_id}, "
+                        f"TEI registration count={total_tei_registration_count}"
+                    )
                 #print("---nexist orgunit--",
                       #assign_value_if_not_null(submission["login_check1"]["y_mobile"]))
                 #print("---nexist orgunit facility_nin --", facility_nin , " -- orgunit_uid " , orgunit_uid)
@@ -439,17 +611,22 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                         # bal_abha_id     
                         {"attribute": "oQVfclOIH0M", "value": assign_value_if_not_null(
                             submission["grp_new_register1"]["bal_abha_id"])},
+                        
                         # class_child_uid
                         {"attribute": "aAMjO9TQK0I", "value": assign_value_if_not_null(submission["class_child_uid"])},
                         # class_father_name
                         {"attribute": "CkPNUpOBflz", "value": assign_value_if_not_null(submission["class_father_name"])},
-
                         # class_mother_name
                         {"attribute": "gtgfofPb13o", "value": assign_value_if_not_null(submission["class_mother_name"])},
-
+                        # class_child_info
+                        {"attribute": "wKVJu2w7pOU", "value": assign_value_if_not_null(submission["class_child_info"])},
+                        # parents_mobile
+                        {"attribute": "DBRB6JEQN1t", "value": assign_value_if_not_null(submission["grp_new_register1"]["parents_mobile"])},
+                                                                            
                         # provider_designation_reg
                          {"attribute": "Z2YCvGEBKtr", "value": assign_value_if_not_null(submission["grp_confirm_child"]["provider_designation_reg"])},
-
+                        # provider_mobile
+                         {"attribute": "XMTiHIym2NE", "value": assign_value_if_not_null(submission["grp_provider"]["provider_mobile"])},
                         # village_ward_code
                          {"attribute": "DVJKfvSmo3F", "value": assign_value_if_not_null(submission["grp_address"]["village_ward_code"])},                            
                     ]),
@@ -472,19 +649,30 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                                     "programStage": "dlQpctFsGBU",
                                     "dataValues": remove_null_values([
                                         # provider_mobile    
-                                        {"dataElement": "nBGWUCCFoiu", "value": assign_value_if_not_null(submission["grp_provider"]["provider_mobile"])},
+                                        #{"dataElement": "nBGWUCCFoiu", "value": assign_value_if_not_null(submission["grp_provider"]["provider_mobile"])},
                                         # provider_name
                                         {"dataElement": "EffdMV85KUy", "value": assign_value_if_not_null(submission["grp_provider"]["provider_name"])},
                                         # provider_designation
                                         {"dataElement": "dFOPmrI4YJ2", "value": assign_value_if_not_null(submission["grp_provider"]["provider_designation"])},
-                                        # class_visit_count_asha    
-                                        {"dataElement": "hEDfjtWDHgl", "value": assign_value_if_not_null(submission["class_visit_count_asha"])},
+                                        # class_visit_count_asha update -- class_visit_count
+                                        #{"dataElement": "hEDfjtWDHgl", "value": assign_value_if_not_null(submission["class_visit_count"])},
+                                        
+                                        # class_date_discharge_newborn
+                                        {"dataElement": "rhUC99D6qI5", "value": assign_value_if_not_null(submission["class_date_discharge_newborn"])},
+                                                                                
+                                        
+                                        
                                         # mcp_card
                                         {"dataElement": "xYiKk1S3mgg", "value": assign_value_if_not_null(submission["grp_new_register1"]["mcp_card"])},
                                         # discharge_slip
                                         {"dataElement": "d1sTo8ed7Y2", "value": assign_value_if_not_null(submission["grp_new_register1"]["discharge_slip"])},
                                         # live_birth
                                         {"dataElement": "kfXbnLthM51", "value": assign_value_if_not_null(submission["grp_new_register1"]["live_birth"])},
+                                        
+                                        # delivery_date
+                                        {"dataElement": "XNDhae1Dsrv", "value": assign_value_if_not_null(submission["grp_new_register1"]["delivery_date"])},
+                                                                                
+                                        
                                         # place_of_delivery
                                         {"dataElement": "Y7ynMzOes0g", "value": assign_value_if_not_null(submission["grp_new_register2"]["place_of_delivery"])},
                                         # type_of_delivery
@@ -497,16 +685,31 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                                         {"dataElement": "S4YXY9a58kl", "value": assign_value_if_not_null(submission["grp_new_register2"]["first_feed"])},
                                         # breastfeed_started
                                         {"dataElement": "Uji3lfiKLG1", "value": assign_value_if_not_null(submission["grp_new_register2"]["breastfeed_started"])},
+                                        
+                                        # date_discharge_newborn_input
+                                        {"dataElement": "gQY18ZXVBp0", "value": assign_value_if_not_null(submission["grp_new_register2"]["date_discharge_newborn_input"])},                         
+
+                                        # date_discharge_mother
+                                        {"dataElement": "tG6MycHCT8T", "value": assign_value_if_not_null(submission["grp_new_register2"]["date_discharge_mother"])},                         
+
+
                                         # class_birth_weight
                                         {"dataElement": "OFb2q78oRSo", "value": assign_value_if_not_null(submission["class_birth_weight"])},
                                         # ageindays
                                         {"dataElement": "fI4XUkOJ9oD", "value": assign_value_if_not_null(submission["ageindays"])},
-                                        # visit_type
-                                        {"dataElement": "ddcBwpTcoTQ", "value": assign_value_if_not_null(submission["visit_type"])},
-                                        #child_available
-                                        {"dataElement": "vP3am2Aw7VX", "value": assign_value_if_not_null(submission["grp_status"]["child_available"])},
+                                        # visit_type grp_find_child update
+                                        {"dataElement": "ddcBwpTcoTQ", "value": assign_value_if_not_null(submission["grp_find_child"]["visit_type"])},
+                                        #child_available remove ["grp_status"]
+                                        {"dataElement": "vP3am2Aw7VX", "value": assign_value_if_not_null(submission["child_available"])},
                                         # cause_nonavailable
                                         {"dataElement": "VDqKs8Z0VEy", "value": assign_value_if_not_null(submission["grp_status"]["cause_nonavailable"])},
+                                        
+                                        # child_date_death
+                                        {"dataElement": "bPXawegdy22", "value": assign_value_if_not_null(submission["grp_status"]["child_date_death"])},
+                                        # child_place_death
+                                        {"dataElement": "jaYQ5cPdp0S", "value": assign_value_if_not_null(submission["grp_status"]["child_place_death"])},
+                                                                                
+                                        
                                         # admitted_nrc_paediatric_unit
                                         {"dataElement": "FVN7fQlUu3e", "value": assign_value_if_not_null(submission["grp_status"]["admitted_nrc_paediatric_unit"])},
                                         # joint_visit_newborn_conducted
@@ -521,10 +724,29 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                                         {"dataElement": "NQYMirAMiV1", "value": assign_value_if_not_null(submission["grp_status"]["birth_defect_treat_followup"])},
                                         # refer_danger_sign
                                         {"dataElement": "iw8IP0mqr5n", "value": assign_value_if_not_null(submission["grp_status"]["refer_danger_sign"])},
+                                        
+                                        # mother_available
+                                        {"dataElement": "UIBQcl7w7D6", "value": assign_value_if_not_null(submission["grp_status"]["mother_available"])},
+                                        
+                                        # mother_alive_visit
+                                        {"dataElement": "rrm4DvfnEMi", "value": assign_value_if_not_null(submission["grp_status"]["mother_alive_visit"])},
+                                        # mother_date_death
+                                        {"dataElement": "autxZ0HDw8d", "value": assign_value_if_not_null(submission["grp_status"]["mother_date_death"])},
+                                                                                       
+                                        # mother_place_death
+                                        {"dataElement": "VTTygEQUmzy", "value": assign_value_if_not_null(submission["grp_status"]["mother_place_death"])},
+                                                                                                                           
+                                        
                                         # class_child_alive
-                                        #{"dataElement": "QjY0NmbU9DI", "value": assign_value_if_not_null(submission["g_symptom4"]["class_child_alive"])},
+                                        {"dataElement": "QjY0NmbU9DI", "value": assign_value_if_not_null(submission["class_child_alive"])},
                                         # class_underweight
                                         {"dataElement": "RRy9aLYSLfT", "value": assign_value_if_not_null(submission["grp_atrisk1"]["class_underweight"])},
+                                        
+                                        # class_result_underweight
+                                        {"dataElement": "EBSt2BFw8La", "value": assign_value_if_not_null(submission["grp_atrisk1"]["class_result_underweight"])},
+                                                                                
+                                        
+                                        
                                         # class_malnutrition
                                         {"dataElement": "eDpx1UsRX8g", "value": assign_value_if_not_null(submission["grp_atrisk1"]["class_malnutrition"])},
                                         # class_microcephaly
@@ -641,34 +863,45 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                                         {"dataElement": "MUET0IWg2Ie", "value": assign_value_if_not_null(submission["grp_feed"]["eye_yellow"])},
                                         # umbilicus_pus_bleed
                                         {"dataElement": "EHRXyq59s6M", "value": assign_value_if_not_null(submission["grp_feed"]["umbilicus_pus_bleed"])},
+
+
+                                        # check_4d
+                                        {"dataElement": "l24YgRsjRP5", "value": assign_value_if_not_null(submission["grp_atrisk3"]["check_4d"])},
+
+
+                                        
                                         # ssnb_family_safety_newborn
-                                        {"dataElement": "OJDYxwz1oGN", "value": assign_value_if_not_null(submission["grp_household1"]["ssnb_family_safety_newborn"])},
+                                        #{"dataElement": "OJDYxwz1oGN", "value": assign_value_if_not_null(submission["grp_household1"]["ssnb_family_safety_newborn"])},
                                         # ssnb_family_need_newborn
-                                        {"dataElement": "oAdKVjriEs0", "value": assign_value_if_not_null(submission["grp_household1"]["ssnb_family_need_newborn"])},
+                                        #{"dataElement": "oAdKVjriEs0", "value": assign_value_if_not_null(submission["grp_household1"]["ssnb_family_need_newborn"])},
                                         # ssyc_family_spend_time
-                                        {"dataElement": "xKYfDEmPJQ9", "value": assign_value_if_not_null(submission["grp_household1"]["ssyc_family_spend_time"])},
+                                        #{"dataElement": "xKYfDEmPJQ9", "value": assign_value_if_not_null(submission["grp_household1"]["ssyc_family_spend_time"])},
                                         # ssyc_child_tv_mobile
-                                        {"dataElement": "Zzqbgd3Jg2Q", "value": assign_value_if_not_null(submission["grp_household1"]["ssyc_child_tv_mobile"])},
+                                        #{"dataElement": "Zzqbgd3Jg2Q", "value": assign_value_if_not_null(submission["grp_household1"]["ssyc_child_tv_mobile"])},
                                         # ssyc_screen_duration
-                                        {"dataElement": "kwX6ngMlfq9", "value": assign_value_if_not_null(submission["grp_household1"]["ssyc_screen_duration"])},
+                                        #{"dataElement": "kwX6ngMlfq9", "value": assign_value_if_not_null(submission["grp_household1"]["ssyc_screen_duration"])},
                                         # ssyc_family_aware_harmful   
-                                        {"dataElement": "pi8tN7GskvG", "value": assign_value_if_not_null(submission["grp_household1"]["ssyc_family_aware_harmful"])},
+                                        #{"dataElement": "pi8tN7GskvG", "value": assign_value_if_not_null(submission["grp_household1"]["ssyc_family_aware_harmful"])},
                                         # parent_counsel_ECD
-                                        {"dataElement": "ritpz4tWR4D", "value": assign_value_if_not_null(submission["grp_household1"]["parent_counsel_ECD"])},
+                                        #{"dataElement": "ritpz4tWR4D", "value": assign_value_if_not_null(submission["grp_household1"]["parent_counsel_ECD"])},
                                         # mother_info_security
-                                        {"dataElement": "vuhqYSvu9zu", "value": assign_value_if_not_null(submission["grp_household1"]["mother_info_security"])},
+                                        #{"dataElement": "vuhqYSvu9zu", "value": assign_value_if_not_null(submission["grp_household1"]["mother_info_security"])},
                                         # hh_pollution_adverse
-                                        {"dataElement": "Utxw4EZKygQ", "value": assign_value_if_not_null(submission["grp_household2"]["hh_pollution_adverse"])},
+                                        #{"dataElement": "Utxw4EZKygQ", "value": assign_value_if_not_null(submission["grp_household2"]["hh_pollution_adverse"])},
                                         # hh_pollution_counsel
-                                        {"dataElement": "z7piqQNBq7L", "value": assign_value_if_not_null(submission["grp_household2"]["hh_pollution_counsel"])},
+                                        #{"dataElement": "z7piqQNBq7L", "value": assign_value_if_not_null(submission["grp_household2"]["hh_pollution_counsel"])},
                                         # hh_heat_adverse_effect
-                                        {"dataElement": "jLDHd76iW4M", "value": assign_value_if_not_null(submission["grp_household2"]["hh_heat_adverse_effect"])},
+                                        #{"dataElement": "jLDHd76iW4M", "value": assign_value_if_not_null(submission["grp_household2"]["hh_heat_adverse_effect"])},
+                                        
                                         # hh_heat_effect_counsel
-                                        {"dataElement": "hNRoDoklLPK", "value": assign_value_if_not_null(submission["grp_household2"]["hh_heat_effect_counsel"])},
+                                        #{"dataElement": "hNRoDoklLPK", "value": assign_value_if_not_null(submission["grp_household2"]["hh_heat_effect_counsel"])},
+
+                                        # deworm
+                                        {"dataElement": "L1UuTDNvZT0", "value": assign_value_if_not_null(submission["grp_vaccine"]["deworm"])},
                                         # vstatus
                                         {"dataElement": "pwgJTIaCMoy", "value": assign_value_if_not_null(submission["grp_vaccine"]["vstatus"])},
                                         # class_mother_in_danger
-                                        {"dataElement": "Jmc5QyosPla", "value": assign_value_if_not_null(submission["grp_danger_mother"]["class_mother_in_danger"])},
+                                        #{"dataElement": "Jmc5QyosPla", "value": assign_value_if_not_null(submission["grp_danger_mother"]["class_mother_in_danger"])},
                                         # mother_diet
                                         {"dataElement": "YVMTW1LFtVq", "value": assign_value_if_not_null(submission["grp_health_mother"]["mother_diet"])},
                                         # mother_wash
@@ -681,6 +914,9 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                                         {"dataElement": "QTc8gPGeboX", "value": assign_value_if_not_null(submission["grp_mental_health"]["mother_mns_1"])},
                                         # mother_mns_2
                                         {"dataElement": "kl7rKBgq2UJ", "value": assign_value_if_not_null(submission["grp_mental_health"]["mother_mns_2"])},
+                                        # class_mother_psycho_distress
+                                        {"dataElement": "paSJB2SSGEP", "value": assign_value_if_not_null(submission["grp_mental_health"]["class_mother_psycho_distress"])},
+                                                                                
                                         # refer_mother
                                         {"dataElement": "cbhCAY5eJbD", "value": assign_value_if_not_null(submission["grp_report_mother"]["refer_mother"])},
                                         # refered_facility
@@ -688,45 +924,45 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                                         # class_visit_day_covered
                                         {"dataElement": "wsvbXNyzrtQ", "value": assign_value_if_not_null(submission["class_visit_day_covered"])},
                                         # class_visit03d_actual_mochoanm
-                                        {"dataElement": "uPdNNuc7zi5", "value": assign_value_if_not_null(submission["class_visit03d_actual_mochoanm"])},
+                                        #{"dataElement": "uPdNNuc7zi5", "value": assign_value_if_not_null(submission["class_visit03d_actual_mochoanm"])},
                                         # class_visit07d_actual_mochoanm
-                                        {"dataElement": "xk4d6CfybnD", "value": assign_value_if_not_null(submission["class_visit07d_actual_mochoanm"])},
+                                        #{"dataElement": "xk4d6CfybnD", "value": assign_value_if_not_null(submission["class_visit07d_actual_mochoanm"])},
                                         # class_visit06m_actual_mochoanm
-                                        {"dataElement": "c40Fyb0eg8Z", "value": assign_value_if_not_null(submission["class_visit06m_actual_mochoanm"])},
+                                        #{"dataElement": "c40Fyb0eg8Z", "value": assign_value_if_not_null(submission["class_visit06m_actual_mochoanm"])},
                                         # class_visit01d_actual_asha
-                                        {"dataElement": "X7ygKtk1tHA", "value": assign_value_if_not_null(submission["class_visit01d_actual_asha"])},
+                                        #{"dataElement": "X7ygKtk1tHA", "value": assign_value_if_not_null(submission["class_visit01d_actual_asha"])},
                                         # class_visit03d_actual_asha
-                                        {"dataElement": "TBk7mUFKq8B", "value": assign_value_if_not_null(submission["class_visit03d_actual_asha"])},
+                                        #{"dataElement": "TBk7mUFKq8B", "value": assign_value_if_not_null(submission["class_visit03d_actual_asha"])},
                                         # class_visit05d_actual_asha
-                                        {"dataElement": "wYTnjZ83qcg", "value": assign_value_if_not_null(submission["class_visit05d_actual_asha"])},
+                                        #{"dataElement": "wYTnjZ83qcg", "value": assign_value_if_not_null(submission["class_visit05d_actual_asha"])},
                                         # class_visit07d_actual_asha
-                                        {"dataElement": "ZbomrgJhHhE", "value": assign_value_if_not_null(submission["class_visit07d_actual_asha"])},
+                                        #{"dataElement": "ZbomrgJhHhE", "value": assign_value_if_not_null(submission["class_visit07d_actual_asha"])},
                                         # class_visit10d_actual_asha
-                                        {"dataElement": "zFDGSB4jy7D", "value": assign_value_if_not_null(submission["class_visit10d_actual_asha"])},
+                                        #{"dataElement": "zFDGSB4jy7D", "value": assign_value_if_not_null(submission["class_visit10d_actual_asha"])},
                                         # class_visit14d_actual_asha
-                                        {"dataElement": "wHkC4kRhiTt", "value": assign_value_if_not_null(submission["class_visit14d_actual_asha"])},
+                                        #{"dataElement": "wHkC4kRhiTt", "value": assign_value_if_not_null(submission["class_visit14d_actual_asha"])},
                                         # class_visit21d_actual_asha
-                                        {"dataElement": "D07WD1FHeI8", "value": assign_value_if_not_null(submission["class_visit21d_actual_asha"])},
+                                        #{"dataElement": "D07WD1FHeI8", "value": assign_value_if_not_null(submission["class_visit21d_actual_asha"])},
                                         # class_visit28d_actual_asha
-                                        {"dataElement": "Ah7W2f2AWlo", "value": assign_value_if_not_null(submission["class_visit28d_actual_asha"])},
+                                        #{"dataElement": "Ah7W2f2AWlo", "value": assign_value_if_not_null(submission["class_visit28d_actual_asha"])},
                                         # class_visit42d_actual_asha
-                                        {"dataElement": "Ftnin96VwEa", "value": assign_value_if_not_null(submission["class_visit42d_actual_asha"])},
+                                        #{"dataElement": "Ftnin96VwEa", "value": assign_value_if_not_null(submission["class_visit42d_actual_asha"])},
                                         # class_visit03m_actual_asha
-                                        {"dataElement": "MuHN3Iv1uEo", "value": assign_value_if_not_null(submission["class_visit03m_actual_asha"])},
+                                        #{"dataElement": "MuHN3Iv1uEo", "value": assign_value_if_not_null(submission["class_visit03m_actual_asha"])},
                                         # class_visit06m_actual_asha
-                                        {"dataElement": "hU4VBB538lk", "value": assign_value_if_not_null(submission["class_visit06m_actual_asha"])},
+                                        #{"dataElement": "hU4VBB538lk", "value": assign_value_if_not_null(submission["class_visit06m_actual_asha"])},
                                         # class_visit09m_actual_asha
-                                        {"dataElement": "aoJW5i7Jtyn", "value": assign_value_if_not_null(submission["class_visit09m_actual_asha"])},
+                                        #{"dataElement": "aoJW5i7Jtyn", "value": assign_value_if_not_null(submission["class_visit09m_actual_asha"])},
                                         # class_visit12m_actual_asha
-                                        {"dataElement": "KK3IAWhRpls", "value": assign_value_if_not_null(submission["class_visit12m_actual_asha"])},
+                                        #{"dataElement": "KK3IAWhRpls", "value": assign_value_if_not_null(submission["class_visit12m_actual_asha"])},
                                         # class_visit18m_actual_asha
-                                        {"dataElement": "peuEiWSfJSU", "value": assign_value_if_not_null(submission["class_visit18m_actual_asha"])},
+                                        #{"dataElement": "peuEiWSfJSU", "value": assign_value_if_not_null(submission["class_visit18m_actual_asha"])},
                                         # class_visit24m_actual_asha
-                                        {"dataElement": "ilfBjsiJnTO", "value": assign_value_if_not_null(submission["class_visit24m_actual_asha"])},
+                                        #{"dataElement": "ilfBjsiJnTO", "value": assign_value_if_not_null(submission["class_visit24m_actual_asha"])},
                                         # class_visit30m_actual_asha
-                                        {"dataElement": "tDojoRfW39B", "value": assign_value_if_not_null(submission["class_visit30m_actual_asha"])},
+                                        #{"dataElement": "tDojoRfW39B", "value": assign_value_if_not_null(submission["class_visit30m_actual_asha"])},
                                         # class_visit36m_actual_asha
-                                        {"dataElement": "ZrL0OXlRpbe", "value": assign_value_if_not_null(submission["class_visit36m_actual_asha"])}
+                                        #{"dataElement": "ZrL0OXlRpbe", "value": assign_value_if_not_null(submission["class_visit36m_actual_asha"])}
                                     ])                                    
 
                                 }
@@ -757,6 +993,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                         {"dataElement": "X72KVMM3IBc", "value": "true"})
 
                 # ssyc_spend_time
+                '''
                 if submission["grp_household1"]["ssyc_spend_time"] is not None and "S01" in submission["grp_household1"]["ssyc_spend_time"]:
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "ZD3Rxswjomh", "value": "true"})              
@@ -769,8 +1006,9 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                 if submission["grp_household1"]["ssyc_spend_time"] is not None and "S04" in submission["grp_household1"]["ssyc_spend_time"]:
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "rjONXcllyuT", "value": "true"})   
-
+                '''
                 # ssyc_child_hungry
+                '''
                 if submission["grp_household1"]["ssyc_child_hungry"] is not None and "H01" in submission["grp_household1"]["ssyc_child_hungry"]:
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "KT9eu1kxT28", "value": "true"})   
@@ -780,8 +1018,9 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                 if submission["grp_household1"]["ssyc_child_hungry"] is not None and "H03" in submission["grp_household1"]["ssyc_child_hungry"]:
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "ByXb3Oxr9qJ", "value": "true"})   
-
+                '''
                 # hh_family_vulnerable
+                '''
                 if submission["grp_household2"]["hh_family_vulnerable"] is not None and "V01" in submission["grp_household2"]["hh_family_vulnerable"]:
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "zT9zlEvI8Em", "value": "true"})   
@@ -806,22 +1045,24 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                 if submission["grp_household2"]["hh_family_vulnerable"] is not None and "V99" in submission["grp_household2"]["hh_family_vulnerable"]:
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "m95sfaOD1ei", "value": "true"})   
-
-                # hh_home_polution
-                if submission["grp_household2"]["hh_home_polution"] is not None and "P01" in submission["grp_household2"]["hh_home_polution"]:
+                '''
+                # hh_home_pollution
+                '''
+                if submission["grp_household2"]["hh_home_pollution"] is not None and "P01" in submission["grp_household2"]["hh_home_polution"]:
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "bHfVpXjgmgS", "value": "true"})   
-                if submission["grp_household2"]["hh_home_polution"] is not None and "P02" in submission["grp_household2"]["hh_home_polution"]:
+                if submission["grp_household2"]["hh_home_pollution"] is not None and "P02" in submission["grp_household2"]["hh_home_polution"]:
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "fdCrbos9H1r", "value": "true"})   
-                if submission["grp_household2"]["hh_home_polution"] is not None and "P03" in submission["grp_household2"]["hh_home_polution"]:
+                if submission["grp_household2"]["hh_home_pollution"] is not None and "P03" in submission["grp_household2"]["hh_home_polution"]:
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "QFOaLpgObyW", "value": "true"})  
-                if submission["grp_household2"]["hh_home_polution"] is not None and "P99" in submission["grp_household2"]["hh_home_polution"]:
+                if submission["grp_household2"]["hh_home_pollution"] is not None and "P99" in submission["grp_household2"]["hh_home_polution"]:
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "z71aOoIBJ6J", "value": "true"})  
-
+                '''
                 # danger_sign_mother
+                '''
                 if submission["grp_danger_mother"]["danger_sign_mother"] is not None and "M01" in submission["grp_danger_mother"]["danger_sign_mother"]:
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "xEArRS2vCMn", "value": "true"})   
@@ -856,7 +1097,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                     tracker["enrollments"][0]["events"][0]["dataValues"].append(
                         {"dataElement": "j3VotwVz0Qb", "value": "true"})  
 
-
+               '''     
                 
                 # json_data = json.dumps(tracker, indent=4)
 
@@ -874,10 +1115,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                 # another TEI with the same unique class_child_uid.
                 
 
-
-
-                
-                class_vaccine_00week_values = submission["grp_vaccine"]["class_vaccine_00week"]
+                class_vaccine_00week_values = submission["grp_vaccine"]["vaccine_00week_input"]
                 if class_vaccine_00week_values is None:
                     class_vaccine_00week_values = []
                 else:
@@ -894,7 +1132,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                             {"dataElement": class_vaccine_00week_mapping[class_vaccine_00week_value], "value": "true"}
                         )                    
 
-                class_vaccine_06week_values = submission["grp_vaccine"]["class_vaccine_06week"]
+                class_vaccine_06week_values = submission["grp_vaccine"]["vaccine_06week_input"]
                 if class_vaccine_06week_values is None:
                     class_vaccine_06week_values = []
                 else:
@@ -912,7 +1150,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                         )                    
 
                 # class_vaccine_10week
-                class_vaccine_10week_values = submission["grp_vaccine"]["class_vaccine_10week"]
+                class_vaccine_10week_values = submission["grp_vaccine"]["vaccine_10week_input"]
                 if class_vaccine_10week_values is None:
                     class_vaccine_10week_values = []
                 else:
@@ -932,7 +1170,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
 
 
                 # class_vaccine_14week
-                class_vaccine_14week_values = submission["grp_vaccine"]["class_vaccine_14week"]
+                class_vaccine_14week_values = submission["grp_vaccine"]["vaccine_14week_input"]
                 if class_vaccine_14week_values is None:
                     class_vaccine_14week_values = []
                 else:
@@ -950,7 +1188,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                         ) 
 
                 # class_vaccine_09month
-                class_vaccine_09month_values = submission["grp_vaccine"]["class_vaccine_09month"]
+                class_vaccine_09month_values = submission["grp_vaccine"]["vaccine_09month_input"]
                 if class_vaccine_09month_values is None:
                     class_vaccine_09month_values = []
                 else:
@@ -969,7 +1207,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
 
 
                 # class_vaccine_16month
-                class_vaccine_16month_values = submission["grp_vaccine"]["class_vaccine_16month"]
+                class_vaccine_16month_values = submission["grp_vaccine"]["vaccine_16month_input"]
                 if class_vaccine_16month_values is None:
                     class_vaccine_16month_values = []
                 else:
@@ -985,7 +1223,71 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                         tracker["enrollments"][0]["events"][0]["dataValues"].append(
                             {"dataElement": class_vaccine_16month_mapping[class_vaccine_16month_value], "value": "true"}
                         ) 
-                 
+
+                # ecd_warning
+                ecd_warning_values = submission["ecd_warning"]
+                if ecd_warning_values is None:
+                    ecd_warning_values = []
+                else:
+                    ecd_warning_values = ecd_warning_values.split()
+
+               # Loop through each value in ecd_warning_mapping
+                for ecd_warning_value in ecd_warning_values:
+                    # Check if the value is in the mapping
+                    if ecd_warning_value in ecd_warning_mapping:
+                        print("ecd_warning_mapping-uid", ecd_warning_mapping[ecd_warning_value])
+                        print("ecd_warning_value", ecd_warning_value)
+                        log_info(f"ecd_warning_mapping-uid, {ecd_warning_mapping[ecd_warning_value]}")
+                        log_info(f"ecd_warning_value, {ecd_warning_value}")
+                        
+                        # Append the corresponding DHIS2 data element to dataValues
+                        tracker["enrollments"][0]["events"][0]["dataValues"].append(
+                            {"dataElement": ecd_warning_mapping[ecd_warning_value], "value": "true"}
+                        ) 
+
+
+                # danger_sign_mother
+                danger_sign_mother_values = submission["grp_danger_mother"]["danger_sign_mother"]
+                if danger_sign_mother_values is None:
+                    danger_sign_mother_values = []
+                else:
+                    danger_sign_mother_values = danger_sign_mother_values.split()
+
+               # Loop through each value in danger_sign_mother_mapping
+                for danger_sign_mother_value in danger_sign_mother_values:
+                    # Check if the value is in the mapping
+                    if danger_sign_mother_value in danger_sign_mother_mapping:
+                        print("danger_sign_mother_mapping-uid", danger_sign_mother_mapping[danger_sign_mother_value])
+                        print("danger_sign_mother_value", danger_sign_mother_value)
+                        log_info(f"danger_sign_mother_mapping-uid, {danger_sign_mother_mapping[danger_sign_mother_value]}")
+                        log_info(f"danger_sign_mother_value, {danger_sign_mother_value}")
+                        
+                        # Append the corresponding DHIS2 data element to dataValues
+                        tracker["enrollments"][0]["events"][0]["dataValues"].append(
+                            {"dataElement": danger_sign_mother_mapping[danger_sign_mother_value], "value": "true"}
+                        ) 
+
+                # danger_sign_child
+                danger_sign_child_values = submission["danger_sign_child"]
+                if danger_sign_child_values is None:
+                    danger_sign_child_values = []
+                else:
+                    danger_sign_child_values = danger_sign_child_values.split()
+
+               # Loop through each value in danger_sign_child_mapping
+                for danger_sign_child_value in danger_sign_child_values:
+                    # Check if the value is in the mapping
+                    if danger_sign_child_value in danger_sign_child_mapping:
+                        print("danger_sign_child_mapping-uid", danger_sign_child_mapping[danger_sign_child_value])
+                        print("danger_sign_child_value", danger_sign_child_value)
+                        log_info(f"danger_sign_child_mapping-uid, {danger_sign_child_mapping[danger_sign_child_value]}")
+                        log_info(f"danger_sign_child_value, {danger_sign_child_value}")
+                        
+                        # Append the corresponding DHIS2 data element to dataValues
+                        tracker["enrollments"][0]["events"][0]["dataValues"].append(
+                            {"dataElement": danger_sign_child_mapping[danger_sign_child_value], "value": "true"}
+                        ) 
+
                 # Convert the temporary new-child payload into an existing-TEI
                 # payload after ALL event data-value mappings have been added.
                 if existing_child:
@@ -996,7 +1298,7 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                         or existing_child.get("orgUnit")
                         or orgunit_uid
                     )
-
+                    
                     event_to_add = tracker["enrollments"][0]["events"][0]
 
                     if existing_enrollment_uid:
@@ -1053,8 +1355,8 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
                 tracker_payloads.append(tracker)
 
                 if tracker_payloads:
-                    #print(f"tracker_payloads {tracker_payloads}")
-                    push_to_dhis2(DHIS2_API_URL, session_dhis2 ,tracker_payloads,index+1, temp_class_child_uid, submission["assessment_date"])
+                    print(f"tracker_payloads --  {tracker_payloads}")
+                    push_to_dhis2(DHIS2_API_URL, session_dhis2 ,tracker_payloads,index+1, temp_class_child_uid, submission["assessment_date"], is_existing_tei=bool(existing_child))
         else:
             log_info(f"DHIS2 organization unit not found for facility nin: {facility_nin} -- block: {block_name} and parent: {district_name}. Skipping.")
             print("DHIS2 organization unit not found for facility nin :" , facility_nin , "-- block:", block_name, "and parent:", district_name, "Skipping.")
@@ -1074,6 +1376,42 @@ def transform_to_dhis2_events(odk_data, orgUnit_code_uid_dict):
 #         log_error("An error occurred while pushing data to DHIS2: " + str(e))
 
 
+def write_dhis2_error_csv(row, event_date, patient_id, response_text):
+
+    error_csv_file = "DHIS2_Push_Errors.csv"
+
+    file_exists = os.path.isfile(error_csv_file)
+
+    try:
+        with open(
+            error_csv_file,
+            mode="a",
+            newline="",
+            encoding="utf-8-sig"
+        ) as csvfile:
+
+            writer = csv.writer(csvfile)
+
+            # Write header only when creating the file
+            if not file_exists:
+                writer.writerow([
+                    "ODK Sl.No",
+                    "Event Date",
+                    "Patient ID",
+                    "Response"
+                ])
+
+            writer.writerow([
+                row,
+                event_date,
+                patient_id,
+                response_text
+            ])
+
+        print(f"Error record saved in CSV: {error_csv_file}")
+
+    except Exception as e:
+        log_error(f"Unable to write DHIS2 error CSV: {str(e)}")
 
 def push_to_dhis2(
     DHIS2_API_URL,
@@ -1081,7 +1419,8 @@ def push_to_dhis2(
     tracked_entities,
     row,
     patient_id,
-    event_date
+    event_date,
+    is_existing_tei=False
 ):
     """Push one or more Tracker payloads to DHIS2.
 
@@ -1128,6 +1467,14 @@ def push_to_dhis2(
                 f"Response: {response.text}"
             )
 
+            # Save failed record into CSV
+            write_dhis2_error_csv(
+                row=row,
+                event_date=event_date,
+                patient_id=patient_id,
+                response_text=response.text
+            )
+
             try:
                 response_json = response.json()
 
@@ -1146,8 +1493,16 @@ def push_to_dhis2(
 
         else:
 
+            #global event_push_count
+            #event_push_count += 1
+
             global event_push_count
+            global existing_tei_event_count
+
             event_push_count += 1
+
+            if is_existing_tei:
+                existing_tei_event_count += 1
 
             print(
                 f"Data successfully pushed to DHIS2. "
@@ -1191,10 +1546,12 @@ def main():
             current_time_start = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             print( f"pushing Tracker event data in DHIS2 start . { current_time_start }" )
             log_info(f"pushing Tracker event data in DHIS2 start . { current_time_start }")
+
             
             odk_data = fetch_odk_data()
             print(f"odk_data size {len(odk_data)}")
             log_info(f"odk_data size {len(odk_data)}")
+            #log_info(f"odk_data  {odk_data}")
 
             orgUnit_code_uid_dict = get_orgUnit_code_uid_dict(org_unit_api_url, session_dhis2, META_ATTRIBUTE_SSBSK_ORG_UNIT_CODE)
             print(f"orgUnit_code_uid_dict facility size {len(orgUnit_code_uid_dict)}")
@@ -1207,12 +1564,14 @@ def main():
                 #if dhis2_events:
                     #print( f"push_to_dhis2 . { push_to_dhis2 }" )
                     #push_to_dhis2(dhis2_events)
+                  
+
         except Exception as e:
            
             print(f"An error occurred in the main process: {str(e)}")
             log_error(f"An error occurred in the main process: {str(e)}")
 
-
+'''
 if __name__ == "__main__":
 
     event_push_count = 0
@@ -1228,3 +1587,39 @@ if __name__ == "__main__":
     print(f"total_child_count. {total_child_count}, null_temp_class_child_uid_count. {null_temp_class_child_uid_count}, event_push_count {event_push_count}, total_skip_count {total_skip_count}")
     log_info(f"total_child_count. {total_child_count}, null_temp_class_child_uid_count. {null_temp_class_child_uid_count}, event_push_count {event_push_count}, total_skip_count {total_skip_count}")
     #sendEmail()
+'''
+if __name__ == "__main__":
+
+    event_push_count = 0
+    total_tei_registration_count = 0
+    existing_tei_event_count = 0
+
+    null_temp_class_child_uid_count = 0
+    total_child_count = 0
+    total_skip_count = 0
+
+    main()
+
+    current_time_end = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    print(f"Pushing Tracker event data in DHIS2 finished: {current_time_end}")
+    log_info(f"Pushing Tracker event data in DHIS2 finished: {current_time_end}")
+
+    print(
+        f"Total ODK submissions processed: {total_child_count}, "
+        f"New TEI registrations: {total_tei_registration_count}, "
+        f"Events pushed successfully: {event_push_count}, "
+        f"Events for existing TEIs: {existing_tei_event_count}, "
+        f"Missing child UID: {null_temp_class_child_uid_count}, "
+        f"Skipped records: {total_skip_count}"
+    )
+
+    log_info(
+        f"Total ODK submissions processed: {total_child_count}, "
+        f"New TEI registrations: {total_tei_registration_count}, "
+        f"Events pushed successfully: {event_push_count}, "
+        f"Events for existing TEIs: {existing_tei_event_count}, "
+        f"Missing child UID: {null_temp_class_child_uid_count}, "
+        f"Skipped records: {total_skip_count}"
+    )
+    #sendEmail( LOG_FILE_ODISHA )
